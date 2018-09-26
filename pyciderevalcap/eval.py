@@ -1,21 +1,11 @@
-__author__ = 'rama'
-from .tokenizer.ptbtokenizer import PTBTokenizer
 from .cider.cider import Cider
 from .ciderD.ciderD import CiderD
 
 
 class CIDErEvalCap:
     def __init__(self, gts, res, df):
-        print('tokenization...')
-        tokenizer = PTBTokenizer('gts')
-        _gts = tokenizer.tokenize(gts)
-        print('tokenized refs')
-        tokenizer = PTBTokenizer('res')
-        _res = tokenizer.tokenize(res)
-        print('tokenized cands')
-
-        self.gts = _gts
-        self.res = _res
+        self.gts = gts
+        self.res = res
         self.df = df
 
     def evaluate(self):

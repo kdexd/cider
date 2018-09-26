@@ -31,7 +31,7 @@ class CiderD(object):
         :return: cider (float) : computed CIDEr score for the corpus
         """
 
-        cider_scorer = CiderScorer(n=self._n)
+        cider_scorer = CiderScorer(n=self._n, df_mode=self._df)
 
         for res_id in res:
 
@@ -39,13 +39,11 @@ class CiderD(object):
             ref = gts[res_id['image_id']]
 
             # Sanity check.
-            assert(type(hypo) is list)
-            assert(len(hypo) == 1)
             assert(type(ref) is list)
             assert(len(ref) > 0)
-            cider_scorer += (hypo[0], ref)
+            cider_scorer += (hypo, ref)
 
-        (score, scores) = cider_scorer.compute_score(self._df)
+        (score, scores) = cider_scorer.compute_score()
 
         return score, scores
 

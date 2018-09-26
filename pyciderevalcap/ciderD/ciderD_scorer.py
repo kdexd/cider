@@ -3,31 +3,49 @@
 # Ramakrishna Vedantam <vrama91@vt.edu>
 
 import copy
-from collections import defaultdict
-import numpy as np
-import pdb
+import json
 import math
-import pickle
 import os
 
-def precook(s, n=4, out=False):
+from nltk.tokenize.treebank import TreebankWordTokenizer
+import numpy as np
+
+
+PUNCTUATIONS = ["''", "'", "``", "`", "(", ")", "{", "}", "[", "]", \
+        ".", "?", "!", ",", ":", "-", "--", "...", ";"]
+
+
+def term_frequency(sentence, ngrams=4):
+    """Given a sentence, calculates term frequency of tuples.
+
+    Parameters
+    ----------
+    sentence : str
+        Sentence whose term frequency has to be calculated.
+    ngrams : int
+        Number of n-grams for which term frequency is calculated.
+
+    Returns
+    -------
+    dict
+        {tuple : int} key-value pairs representing term frequency.
     """
-    Takes a string as input and returns an object that can be given to
-    either cook_refs or cook_test. This is optional: cook_refs and cook_test
-    can take string arguments as well.
-    :param s: string : sentence to be converted into ngrams
-    :param n: int    : number of ngrams for which representation is calculated
-    :return: term frequency vector for occuring ngrams
-    """
-    words = s.split()
-    counts = defaultdict(int)
-    for k in xrange(1,n+1):
-        for i in xrange(len(words)-k+1):
-            ngram = tuple(words[i:i+k])
-            counts[ngram] += 1
+    sentence = sentence.lower().strip()
+    for punc in PUNCTUATIONS:
+        sentence = sentence.replace(punc, "")
+    words = TreebankWordTokenizer().tokenize(sentence)
+    counts = {}
+    for i in range(ngrams):
+        for j in range(len(words) - i):
+            ngram = tuple(words[j:(j + i + 1)])
+            if ngram in counts:
+                counts[ngram] += 1
+            else:
+                counts[ngram] = 1
     return counts
 
-def cook_refs(refs, n=4): ## lhuang: oracle will call with "average"
+
+def cook_refs(refs, n=4):
     '''Takes a list of reference sentences for a single segment
     and returns an object that encapsulates everything that BLEU
     needs to know about them.
@@ -35,7 +53,8 @@ def cook_refs(refs, n=4): ## lhuang: oracle will call with "average"
     :param n: int : number of ngrams for which (ngram) representation is calculated
     :return: result (list of dict)
     '''
-    return [precook(ref, n) for ref in refs]
+    return [term_frequency(ref['caption'], n) for ref in refs]
+
 
 def cook_test(test, n=4):
     '''Takes a test sentence and returns an object that
@@ -44,7 +63,8 @@ def cook_test(test, n=4):
     :param n: int : number of ngrams for which (ngram) representation is calculated
     :return: result (dict)
     '''
-    return precook(test, n, True)
+    return term_frequency(test, n)
+
 
 class CiderScorer(object):
     """CIDEr scorer.
@@ -57,19 +77,19 @@ class CiderScorer(object):
         new.crefs = copy.copy(self.crefs)
         return new
 
-    def __init__(self, test=None, refs=None, n=4, sigma=6.0):
-        ''' singular instance '''
+    def __init__(self, test=None, refs=None, n=4, sigma=6.0, df_mode="coco-val-df"):
+        """Singular instance."""
         self.n = n
         self.sigma = sigma
-        self.crefs = []
+        self.df_mode = df_mode
         self.ctest = []
-        self.document_frequency = defaultdict(float)
+        self.crefs = []
         self.cook_append(test, refs)
         self.ref_len = None
+        self.document_frequency = None
 
     def cook_append(self, test, refs):
-        '''called by constructor and __iadd__ to avoid creating new instances.'''
-
+        """Called by constructor and __iadd__ to avoid creating new instances."""
         if refs is not None:
             self.crefs.append(cook_refs(refs))
             if test is not None:
@@ -84,28 +104,39 @@ class CiderScorer(object):
     def __iadd__(self, other):
         '''add an instance (e.g., from another sentence).'''
 
-        if type(other) is tuple:
+        if isinstance(other, tuple):
             ## avoid creating new CiderScorer instances
             self.cook_append(other[0], other[1])
         else:
             self.ctest.extend(other.ctest)
             self.crefs.extend(other.crefs)
-
         return self
-    def compute_doc_freq(self):
+
+    def _compute_document_frequency(self):
         '''
         Compute term frequency for reference data.
         This will be used to compute idf (inverse document frequency later)
         The term frequency is stored in the object
         :return: None
         '''
-        for refs in self.crefs:
-            # refs, k ref captions of one image
-            for ngram in set([ngram for ref in refs for (ngram,count) in ref.iteritems()]):
-                self.document_frequency[ngram] += 1
-            # maxcounts[ngram] = max(maxcounts.get(ngram,0), count)
+        document_frequency = {}
+        if self.df_mode == "corpus":
+            for refs in self.crefs:
+                # refs, k ref captions of one image
+                for ngram in set([ngram for ref in refs for (ngram, count) in ref.items()]):
+                    document_frequency[ngram] += 1
+            assert(len(self.ctest) >= max(document_frequency.values()))
+        elif self.df_mode == "coco-val-df":
+            document_frequency_temp = json.load(open(os.path.join('data', 'coco_val_df.json')))
+            # convert string to tuple
+            for key in document_frequency_temp:
+                document_frequency[eval(key)] = document_frequency_temp[key]
+        else:
+            raise ValueError(f"df_mode can be either corpus or coco-val-df, provided {self.df_mode}!")
+        return document_frequency
 
-    def compute_cider(self, df_mode):
+    def compute_score(self):
+        self.document_frequency = self._compute_document_frequency()
         def counts2vec(cnts):
             """
             Function maps counts of ngram to vector of tfidf weights.
@@ -114,17 +145,18 @@ class CiderScorer(object):
             :param cnts:
             :return: vec (array of dict), norm (array of float), length (int)
             """
-            vec = [defaultdict(float) for _ in range(self.n)]
+            vec = [{} for _ in range(self.n)]
             length = 0
             norm = [0.0 for _ in range(self.n)]
-            for (ngram,term_freq) in cnts.iteritems():
+            for (ngram, term_freq) in cnts.items():
                 # give word count 1 if it doesn't appear in reference corpus
-                df = np.log(max(1.0, self.document_frequency[ngram]))
+                df = np.log(self.document_frequency.get(ngram, 1.0))
                 # ngram index
-                n = len(ngram)-1
+                n = len(ngram) - 1
                 # tf (term_freq) * idf (precomputed idf) for n-grams
-                vec[n][ngram] = float(term_freq)*(self.ref_len - df)
-                # compute norm for the vector.  the norm will be used for computing similarity
+                vec[n][ngram] = float(term_freq) * (self.ref_len - df)
+                # compute norm for the vector.  the norm will be used for
+                # computing similarity
                 norm[n] += pow(vec[n][ngram], 2)
 
                 if n == 1:
@@ -148,9 +180,8 @@ class CiderScorer(object):
             val = np.array([0.0 for _ in range(self.n)])
             for n in range(self.n):
                 # ngram
-                for (ngram,count) in vec_hyp[n].iteritems():
-                    # vrama91 : added clipping
-                    val[n] += min(vec_hyp[n][ngram], vec_ref[n][ngram]) * vec_ref[n][ngram]
+                for (ngram,count) in vec_hyp[n].items():
+                    val[n] += vec_hyp[n].get(ngram, 0) * vec_ref[n].get(ngram, 0)
 
                 if (norm_hyp[n] != 0) and (norm_ref[n] != 0):
                     val[n] /= (norm_hyp[n]*norm_ref[n])
@@ -161,9 +192,9 @@ class CiderScorer(object):
             return val
 
         # compute log reference length
-        if df_mode == "corpus":
+        if self.df_mode == "corpus":
             self.ref_len = np.log(float(len(self.crefs)))
-        elif df_mode == "coco-val-df":
+        elif self.df_mode == "coco-val-df":
             # if coco option selected, use length of coco-val set
             self.ref_len = np.log(float(40504))
 
@@ -184,19 +215,4 @@ class CiderScorer(object):
             score_avg *= 10.0
             # append score of an image to the score list
             scores.append(score_avg)
-        return scores
-
-    def compute_score(self, df_mode, option=None, verbose=0):
-        # compute idf
-        if df_mode == "corpus":
-            self.compute_doc_freq()
-            # assert to check document frequency
-            assert(len(self.ctest) >= max(self.document_frequency.values()))
-            # import json for now and write the corresponding files
-        else:
-            self.document_frequency = pickle.load(open(os.path.join('data', df_mode + '.p'),'r'))
-        # compute cider score
-        score = self.compute_cider(df_mode)
-        # debug
-        # print score
-        return np.mean(np.array(score)), np.array(score)
+        return np.mean(np.array(scores)), np.array(scores)

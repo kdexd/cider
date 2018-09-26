@@ -3,20 +3,26 @@
 # Ramakrishna Vedantam <vrama91@vt.edu>
 
 import copy
+import json
 import math
 import os
 
 import numpy as np
+from nltk.tokenize.treebank import TreebankWordTokenizer
 
 
-def term_frequency(sentence, n_grams=4):
+PUNCTUATIONS = ["''", "'", "``", "`", "(", ")", "{", "}", "[", "]", \
+        ".", "?", "!", ",", ":", "-", "--", "...", ";"]
+
+
+def term_frequency(sentence, ngrams=4):
     """Given a sentence, calculates term frequency of tuples.
 
     Parameters
     ----------
     sentence : str
         Sentence whose term frequency has to be calculated.
-    n_grams : int
+    ngrams : int
         Number of n-grams for which term frequency is calculated.
 
     Returns
@@ -24,12 +30,18 @@ def term_frequency(sentence, n_grams=4):
     dict
         {tuple : int} key-value pairs representing term frequency.
     """
-    words = sentence.split()
+    sentence = sentence.lower().strip()
+    for punc in PUNCTUATIONS:
+        sentence = sentence.replace(punc, "")
+    words = TreebankWordTokenizer().tokenize(sentence)
     counts = {}
-    for i in range(n):
+    for i in range(ngrams):
         for j in range(len(words) - i):
             ngram = tuple(words[j:(j + i + 1)])
-            counts[ngram] += 1
+            if ngram in counts:
+                counts[ngram] += 1
+            else:
+                counts[ngram] = 1
     return counts
 
 
@@ -41,7 +53,7 @@ def cook_refs(refs, n=4):
     :param n: int : number of ngrams for which (ngram) representation is calculated
     :return: result (list of dict)
     '''
-    return [term_frequency(ref, n) for ref in refs]
+    return [term_frequency(ref['caption'], n) for ref in refs]
 
 
 def cook_test(test, n=4):
@@ -51,7 +63,7 @@ def cook_test(test, n=4):
     :param n: int : number of ngrams for which (ngram) representation is calculated
     :return: result (dict)
     '''
-    return term_frequency(test, n, True)
+    return term_frequency(test, n)
 
 
 class CiderScorer(object):
@@ -64,7 +76,7 @@ class CiderScorer(object):
         new.crefs = copy.copy(self.crefs)
         return new
 
-    def __init__(self, test, refs, n=4, df_mode="coco-val-df"):
+    def __init__(self, test=None, refs=None, n=4, df_mode="coco-val-df"):
         """Singular instance."""
         self.n = n
         self.df_mode = df_mode
@@ -131,16 +143,16 @@ class CiderScorer(object):
             :param cnts:
             :return: vec (array of dict), norm (array of float), length (int)
             """
-            vec = [defaultdict(float) for _ in range(self.n)]
+            vec = [{} for _ in range(self.n)]
             length = 0
             norm = [0.0 for _ in range(self.n)]
-            for (ngram,term_freq) in cnts.iteritems():
+            for (ngram, term_freq) in cnts.items():
                 # give word count 1 if it doesn't appear in reference corpus
-                df = np.log(max(1.0, self.document_frequency[ngram]))
+                df = np.log(self.document_frequency.get(ngram, 1.0))
                 # ngram index
-                n = len(ngram)-1
+                n = len(ngram) - 1
                 # tf (term_freq) * idf (precomputed idf) for n-grams
-                vec[n][ngram] = float(term_freq)*(self.ref_len - df)
+                vec[n][ngram] = float(term_freq) * (self.ref_len - df)
                 # compute norm for the vector.  the norm will be used for
                 # computing similarity
                 norm[n] += pow(vec[n][ngram], 2)
@@ -166,8 +178,8 @@ class CiderScorer(object):
             val = np.array([0.0 for _ in range(self.n)])
             for n in range(self.n):
                 # ngram
-                for (ngram,count) in vec_hyp[n].iteritems():
-                    val[n] += vec_hyp[n][ngram] * vec_ref[n][ngram]
+                for (ngram,count) in vec_hyp[n].items():
+                    val[n] += vec_hyp[n].get(ngram, 0) * vec_ref[n].get(ngram, 0)
 
                 if (norm_hyp[n] != 0) and (norm_ref[n] != 0):
                     val[n] /= (norm_hyp[n]*norm_ref[n])
@@ -176,9 +188,9 @@ class CiderScorer(object):
             return val
 
         # compute log reference length
-        if df_mode == "corpus":
+        if self.df_mode == "corpus":
             self.ref_len = np.log(float(len(self.crefs)))
-        elif df_mode == "coco-val-df":
+        elif self.df_mode == "coco-val-df":
             # if coco option selected, use length of coco-val set
             self.ref_len = np.log(float(40504))
 
