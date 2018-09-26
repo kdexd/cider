@@ -23,7 +23,8 @@ STANFORD_CORENLP_3_4_1_JAR = 'stanford-corenlp-3.4.1.jar'
 PUNCTUATIONS = ["''", "'", "``", "`", "-LRB-", "-RRB-", "-LCB-", "-RCB-", \
         ".", "?", "!", ",", ":", "-", "--", "...", ";"] 
 
-class PTBTokenizer:
+
+class PTBTokenizer(object):
     """Python wrapper of Stanford PTBTokenizer"""
     def __init__(self, _source='gts'):
         self.source = _source
@@ -41,7 +42,6 @@ class PTBTokenizer:
             image_id = [k for k, v in captions_for_image.items() for _ in range(len(v))]
             sentences = '\n'.join([c['caption'].replace('\n', ' ') for k, v in captions_for_image.items() for c in v])
             final_tokenized_captions_for_image = {}
-
         elif self.source == 'res':
             index = [i for i, v in enumerate(captions_for_image)]
             image_id = [v["image_id"] for v in captions_for_image]
@@ -52,7 +52,7 @@ class PTBTokenizer:
         # save sentences to temporary file
         # ======================================================
         path_to_jar_dirname=os.path.dirname(os.path.abspath(__file__))
-        tmp_file = tempfile.NamedTemporaryFile(delete=False, dir=path_to_jar_dirname)
+        tmp_file = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt', delete=False, dir=path_to_jar_dirname)
         tmp_file.write(sentences)
         tmp_file.close()
 

@@ -7,10 +7,10 @@
 #
 # Authors: Ramakrishna Vedantam <vrama91@vt.edu> and Tsung-Yi Lin <tl483@cornell.edu>
 
-from ciderD_scorer import CiderScorer
-import pdb
+from .ciderD_scorer import CiderScorer
 
-class CiderD:
+
+class CiderD(object):
     """
     Main Class to compute the CIDEr metric
 

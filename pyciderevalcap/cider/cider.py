@@ -10,10 +10,10 @@
 # Authors: Ramakrishna Vedantam <vrama91@vt.edu> and
 # Tsung-Yi Lin <tl483@cornell.edu>
 
-from cider_scorer import CiderScorer
+from .cider_scorer import CiderScorer
 
 
-class Cider:
+class Cider(object):
     """
     Main Class to compute the CIDEr metric
 
@@ -38,7 +38,7 @@ class Cider:
         : return: cider (float) : computed CIDEr score for the corpus
         """
 
-        cider_scorer = CiderScorer(n=self._n)
+        cider_scorer = CiderScorer(self._n, self._df)
 
         for res_id in res:
 
@@ -52,7 +52,7 @@ class Cider:
             assert(len(ref) > 0)
             cider_scorer += (hypo[0], ref)
 
-        (score, scores) = cider_scorer.compute_score(self._df)
+        (score, scores) = cider_scorer.compute_score()
 
         return score, scores
 

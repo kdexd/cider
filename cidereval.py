@@ -17,13 +17,13 @@ resultFile = config['resultFile']
 df_mode = config['idf']
 
 # Print the parameters
-print "Running CIDEr with the following settings"
-print "*****************************"
-print "Reference File:%s" % (refName)
-print "Candidate File:%s" % (candName)
-print "Result File:%s" % (resultFile)
-print "IDF:%s" % (df_mode)
-print "*****************************"
+print("Running CIDEr with the following settings")
+print("*****************************")
+print("Reference File:%s" % (refName))
+print("Candidate File:%s" % (candName))
+print("Result File:%s" % (resultFile))
+print("IDF:%s" % (df_mode))
+print("*****************************")
 
 # In[2]:
 
