@@ -53,7 +53,7 @@ def cook_refs(refs, n=4):
     :param n: int : number of ngrams for which (ngram) representation is calculated
     :return: result (list of dict)
     '''
-    return [term_frequency(ref['caption'], n) for ref in refs]
+    return [term_frequency(ref, n) for ref in refs]
 
 
 def cook_test(test, n=4):
