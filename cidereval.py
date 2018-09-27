@@ -1,10 +1,7 @@
-# coding: utf-8
-
-# In[1]:
-
 # demo script for running CIDEr
 import json
-from pydataformat.loadData import LoadData
+import os
+
 from pyciderevalcap.eval import CIDErEvalCap as ciderEval
 
 # load the configuration file
@@ -17,25 +14,29 @@ resultFile = config['resultFile']
 df_mode = config['idf']
 
 # Print the parameters
-print "Running CIDEr with the following settings"
-print "*****************************"
-print "Reference File:%s" % (refName)
-print "Candidate File:%s" % (candName)
-print "Result File:%s" % (resultFile)
-print "IDF:%s" % (df_mode)
-print "*****************************"
+print("Running CIDEr with the following settings")
+print("*****************************")
+print("Reference File:%s" % (refName))
+print("Candidate File:%s" % (candName))
+print("Result File:%s" % (resultFile))
+print("IDF:%s" % (df_mode))
+print("*****************************")
 
-# In[2]:
+ref_file = os.path.join(pathToData, refName)
+cand_file = os.path.join(pathToData, candName)
 
-# load reference and candidate sentences
-loadDat = LoadData(pathToData)
-gts, res = loadDat.readJson(refName, candName)
+ref_list = json.load(open(ref_file))
+cand_list = json.load(open(cand_file))
 
-
-# In[3]:
+gts = {}
+for ref in ref_list:
+    if ref['image_id'] in gts:
+        gts[ref['image_id']].append(ref['caption'])
+    else:
+        gts[ref['image_id']] = [ref['caption']]
 
 # calculate cider scores
-scorer = ciderEval(gts, res, df_mode)
+scorer = ciderEval(gts, cand_list, df_mode)
 # scores: dict of list with key = metric and value = score given to each
 # candidate
 scores = scorer.evaluate()
